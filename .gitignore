@@ -15,7 +15,11 @@ lexer.c
 lexer.h
 parser.c
 parser.h
+topt.c
+topt.h
 install_manifest.txt
 _CPack_Packages/*
 *.deb
 !.gitignore
+src/zblacklist
+src/ztee

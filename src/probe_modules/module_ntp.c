@@ -52,13 +52,10 @@ int ntp_make_packet(void *buf, ipaddr_n_t src_ip, ipaddr_n_t dst_ip,
 void ntp_process_packet(const u_char *packet, __attribute__((unused)) uint32_t len, fieldset_t *fs){
     struct ip *ip_hdr =  (struct ip *) &packet[sizeof(struct ether_header)];
     int *ptr;
-    uint64_t line, temp64;
+    uint64_t temp64;
     uint8_t temp8;
     uint32_t temp32;
 
-    uint8_t testing8 = 1;
-    uint32_t testing32 = 1;
-    uint64_t testing64 = 1;
     if(ip_hdr->ip_p ==  IPPROTO_UDP){
         struct udphdr *udp = (struct udphdr *) ((char *) ip_hdr + ip_hdr->ip_hl * 4);
         struct module_ntp *ntp = (struct module_ntp *) &udp[1];
@@ -72,7 +69,7 @@ void ntp_process_packet(const u_char *packet, __attribute__((unused)) uint32_t l
         fs_add_null(fs, "icmp_code");
         fs_add_null(fs, "icmp_unreach_str");
         
-        ptr = &ntp;
+        ptr = (int *)ntp;
 
         temp8 = *((uint8_t *)ptr); 
         fs_add_uint64(fs, "LI_VN_MODE", temp8);
@@ -126,7 +123,7 @@ void ntp_process_packet(const u_char *packet, __attribute__((unused)) uint32_t l
 }
 
 int ntp_init_perthread(void *buf, macaddr_t *src, 
-        macaddr_t *gw, __attribute__((unused)) port_h_t dst_port){
+        macaddr_t *gw, __attribute__((unused)) port_h_t dst_port, void **arg){
    
 
     udp_send_msg = strdup(udp_send_msg_default);
@@ -157,12 +154,29 @@ int ntp_init_perthread(void *buf, macaddr_t *src,
 
 	memcpy(payload, ntp_header, module_ntp.packet_length);
 
+    uint32_t seed = aesrand_getword(zconf.aes);
+    aesrand_t *aes = aesrand_init_from_seed(seed);
+    *arg = aes;
+
 	return EXIT_SUCCESS;
 }
 
-//print packet taken out for lack of need
 void ntp_print_packet(FILE *fp, void *packet){
-
+    
+    struct ether_header *ethh = (struct ether_header *)packet;
+    struct ip *iph = (struct ip *) &ethh[1];
+    struct udphdr *udph = (struct udphdr *) (iph + 4*iph->ip_hl);
+    struct ntphdr *ntph = (struct ntphdr *) &udph[1];
+    fprintf(fp, "ntp { LI_VN_MODE: %u | stratum: %u | poll: %u }\n",
+            ntph->LI_VN_MODE, ntph->stratum, ntph->poll);
+    fprintf(fp, "udp { source: %u | dest: %u | checksum: %u }\n",
+            ntohs(udph->uh_sport),
+            ntohs(udph->uh_dport),
+            ntohl(udph->uh_sum));
+    fprintf_ip_header(fp, iph);
+    fprintf_eth_header(fp, ethh);
+    
+    fprintf(fp, "-------------------------------------------------\n");
 }
 
 static fielddef_t fields[] = {
